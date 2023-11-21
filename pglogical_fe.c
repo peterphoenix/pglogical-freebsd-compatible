@@ -12,6 +12,8 @@
  */
 #include "libpq-fe.h"
 #include "postgres_fe.h"
+#include <sys/types.h>
+#include <sys/wait.h>
 
 /* Note the order is important for debian here. */
 #if !defined(pg_attribute_printf)
