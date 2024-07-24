@@ -467,7 +467,7 @@ static void
 pglogical_proccess_copy(pglogical_copyState *pglcstate)
 {
 	uint64	processed;
-	int		save_stdin;
+	FILE	*save_stdin;
 
 	if (!pglcstate->copy_parsetree || !pglcstate->copy_buffered_tuples)
 		return;
@@ -502,16 +502,39 @@ pglogical_proccess_copy(pglogical_copyState *pglcstate)
 	 * for this relation. Before that we save the current 'stdin' stream and
 	 * restore it back when the COPY is done
 	 */
-+	save_stdin = dup(fileno(stdin));
-+	if (save_stdin < 0)
-+		ereport(FATAL,
-+				(errcode_for_file_access(),
-+				 errmsg("could not save stdin: %m")));
-+
-+	if (dup2(fileno(pglcstate->copy_read_file), fileno(stdin)) < 0)
-+		ereport(FATAL,
-+				(errcode_for_file_access(),
-+				 errmsg("could not redirect stdin: %m")));
+    save_stdin = fdopen(dup(fileno(stdin)), "r");
+
+    if (!save_stdin)
+    {
+        /* Handle error */
+        fprintf(stderr, "Failed to duplicate stdin\n");
+        return;
+    }
+
+    if (freopen("/dev/null", "r", stdin) == NULL)
+    {
+        /* Handle error */
+        fprintf(stderr, "Failed to redirect stdin to /dev/null\n");
+        fclose(save_stdin);
+        return;
+    }
+
+    if (freopen("/dev/null", "r", stdin) == NULL)
+    {
+        /* Handle error */
+        fprintf(stderr, "Failed to reopen stdin\n");
+        fclose(save_stdin);
+        return;
+    }
+
+    /* Redirect stdin to pglcstate->copy_read_file */
+    if (freopen(pglcstate->copy_read_file, "r", stdin) == NULL)
+    {
+        /* Handle error */
+        fprintf(stderr, "Failed to redirect stdin to copy_read_file\n");
+        fclose(save_stdin);
+        return;
+    }
 
 	/* COPY may call into SPI (triggers, ...) and we already are in SPI. */
 	SPI_push();
@@ -538,7 +561,16 @@ pglogical_proccess_copy(pglogical_copyState *pglcstate)
 
 	fclose(pglcstate->copy_read_file);
 	pglcstate->copy_read_file = NULL;
-//	stdin = save_stdin;
+
+    if (dup2(fileno(save_stdin), fileno(stdin)) < 0)
+    {
+        /* Handle error */
+        fprintf(stderr, "Failed to restore original stdin\n");
+        fclose(save_stdin);
+        return;
+    }
+
+    fclose(save_stdin);
 
 	/* Ensure we processed correct number of tuples */
 	Assert(processed == pglcstate->copy_buffered_tuples);
