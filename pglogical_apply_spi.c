@@ -527,14 +527,14 @@ pglogical_proccess_copy(pglogical_copyState *pglcstate)
 
 	/* Clean up SPI state */
 	SPI_pop();
-	+	/*
-    +	 * Also close the read end of the pipe and restore 'stdin' to its original
-    +	 * value
-    +	 */
-    +	if (dup2(save_stdin, fileno(stdin)) < 0)
-    +		ereport(FATAL,
-    +				(errcode_for_file_access(),
-    +				 errmsg("could not restore stdin: %m")));
+    /*
+     * Also close the read end of the pipe and restore 'stdin' to its original
+     * value
+     */
+    if (dup2(save_stdin, fileno(stdin)) < 0)
+        ereport(FATAL,
+                (errcode_for_file_access(),
+                 errmsg("could not restore stdin: %m")));
 
 	fclose(pglcstate->copy_read_file);
 	pglcstate->copy_read_file = NULL;
